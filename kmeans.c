@@ -236,7 +236,6 @@ PyObject *buildPyListCentroids(Cluster *clustersArray, const int *k, const int *
         if (PyList_SetItem(listOfCentrals, i, central)) {
             Py_DecRef(listOfCentrals);
             Py_DecRef(central);
-            Py_DecRef(comp);
             return NULL; /* Appending error */
         }
     }
