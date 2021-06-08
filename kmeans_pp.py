@@ -9,7 +9,8 @@ FIRST_FILE_INDEX_IN_ARGV = 2
 SECOND_FILE_INDEX_IN_ARGV = 3
 COMMA = ','
 
-
+# validates the arguments, asigns the vectors data and a list of the indexes for the first clusters cenrtals.
+# Using fit function from the module we build in C
 def main():
     k, max_iter = validate_and_assign_input_user()
     df_of_vectors = build_vectors_panda()
@@ -19,13 +20,15 @@ def main():
         exit()  # End program k >= n
 
     list_random_init_centrals_indexes = choose_random_centrals(df_of_vectors, k, number_of_vectors)
-    print(*list_random_init_centrals_indexes, sep=COMMA)
-    list_of_vectors = df_of_vectors.values.tolist()
+    print(*list_random_init_centrals_indexes, sep=COMMA) # prints the chosen indexes to be the first clusters centrals
+    list_of_vectors = df_of_vectors.values.tolist() # changes dataframe to list of lists for the fit function
     final_centroids_list = mykmeanssp.fit(k, max_iter, dimensions, number_of_vectors, list_random_init_centrals_indexes,
                                           list_of_vectors)
     print_centrals(final_centroids_list)
 
 
+# validates the users input (amount of arguments, reciving int when needed) and assigns it to its charcter
+# using (MIN_ARGUMENTS + 1) - there is really minimum of 4 arguments but it is more comftrable and intuitive this wat
 def validate_and_assign_input_user():
     if len(sys.argv) < MIN_ARGUMENTS + 1:
         print(f"Amount of arguments should be at least {MIN_ARGUMENTS}: amount of arguments = {len(sys.argv) - 1}")
@@ -44,6 +47,8 @@ def validate_and_assign_input_user():
     return k, max_iter
 
 
+#  Validates file arguments and assings them, combines both files in to one panda with inner join
+#  Returns a panda that is holding the combined files data
 def build_vectors_panda():
     add_argv_index = 1 if len(sys.argv) > MIN_ARGUMENTS + 1 else 0
     try:
@@ -54,14 +59,15 @@ def build_vectors_panda():
         exit()
     pd_1.rename(columns={list(pd_1)[0]: 'id'}, inplace=True)  # renaming both first columns for the merge
     pd_2.rename(columns={list(pd_2)[0]: 'id'}, inplace=True)
-    df = pd.merge(pd_1, pd_2, how='inner', on='id')
+    df = pd.merge(pd_1, pd_2, how='inner', on='id') # mergimg using inner with id
     df.sort_values('id', inplace=True)
     df = df.iloc[:, 1:]
     return df
 
 
 # receives the vectors pandas and amount of k clusters and builds a list of clusters
-# returns a list of clusters
+# returns a list of clusters first central indexes
+# function uses the distances from a vector to the clostest central to pick the next central with random.choice with a propobility by that distance
 def choose_random_centrals(df_of_vectors, k, num_of_vectors):
     np.random.seed(0)
     list_random_init_centrals_indexes = [np.random.choice(num_of_vectors)]
