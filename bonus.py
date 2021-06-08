@@ -32,7 +32,7 @@ def save_plot(inertia_list):
     plt.annotate('Elbow Point', xy=(3, inertia_list[2]), arrowprops=arrow_style, xytext=(4, 200))
     plt.xticks(range(1, MAX_K + 1))
     plt.xlabel('K')
-    plt.ylabel('Normalized inertia')
+    plt.ylabel('SSE')
     plt.title('Elbow Method for selection of optimal "K" clusters')
     plt.savefig(FIG_FILE_PIC)
 
