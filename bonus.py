@@ -29,7 +29,7 @@ def save_plot(inertia_list):
     plt.plot(range(1, MAX_K + 1), inertia_list, 'b-')
     plt.plot(3, inertia_list[2], 'o', ms=20, mec='k', mfc='none')  # Adding circle around the elbow point
     arrow_style = dict(arrowstyle='->', linestyle='--')  # Adding arrow to the elbow point
-    plt.annotate('Elbow Point', xy=(3, inertia_list[2]), arrowprops=arrow_style, xytext=(4, 0.6))
+    plt.annotate('Elbow Point', xy=(3, inertia_list[2]), arrowprops=arrow_style, xytext=(4, 200))
     plt.xticks(range(1, MAX_K + 1))
     plt.xlabel('K')
     plt.ylabel('Normalized inertia')
