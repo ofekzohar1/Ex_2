@@ -22,7 +22,7 @@ def main():
     save_plot(inertia_list)
 
 
-# The function received a list of inertia, scales it between 0-1
+# The function received a list of inertia
 # The function saves a plot with a circle on the Elbow point and arrow aimed at it
 def save_plot(inertia_list):
     matplotlib.use('Agg')  # For saving the figure as png

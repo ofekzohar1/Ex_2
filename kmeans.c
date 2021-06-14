@@ -2,6 +2,7 @@
 #include <Python.h>
 
 #define SQ(x) ((x)*(x))
+/* Custom made python type error */
 #define MyPy_TypeErr(x, y) \
 PyErr_Format(PyExc_TypeError, "%s type is required (got type %s)", x ,Py_TYPE(y)->tp_name) \
 
@@ -56,28 +57,28 @@ static PyObject* fit_connect(PyObject *self, PyObject *args) {
     PyObject *pyCentralsList, *pyVectorsList;
     int k, maxIter, dimension, numOfVectors, *firstCentralIndexes;
     double **vectorsArray;
-    /* This parses the Python arguments into a double (d)  variable named z and int (i) variable named n*/
+
     if (!PyArg_ParseTuple(args, "iiiiOO", &k, &maxIter, &dimension, &numOfVectors, &pyCentralsList, &pyVectorsList))
-        return NULL;
+        return NULL; /* Type error - not in correct format */
     if (!PyList_Check(pyCentralsList)) {
         MyPy_TypeErr("List", pyCentralsList);
-        return NULL;
+        return NULL; /* Type error - not a python List */
     }
     if (!PyList_Check(pyVectorsList))
     {
         MyPy_TypeErr("List", pyVectorsList);
-        return NULL;
+        return NULL; /* Type error - not a python List */
     }
 
     Py_IncRef(pyCentralsList);
     Py_IncRef(pyVectorsList);
     firstCentralIndexes = (int *) malloc(k * sizeof(int));
     if (firstCentralIndexes == NULL)
-        return PyErr_NoMemory();
+        return PyErr_NoMemory(); /* Memory allocation error */
     for (i = 0; i < k; i++) {
         firstCentralIndexes[i] = (int)PyLong_AsLong(PyList_GetItem(pyCentralsList, i));
         if (PyErr_Occurred())
-            return NULL;
+            return NULL; /* Casting error to int */
     }
     vectorsArray = initVectorsArray(&numOfVectors, &dimension, pyVectorsList);
     Py_DecRef(pyCentralsList);
@@ -130,7 +131,7 @@ double **initVectorsArray(const int *numOfVectors, const int *dimension, PyObjec
     vectorsArray = malloc((*numOfVectors) * sizeof(double *));
     if (matrix == NULL || vectorsArray == NULL){
         PyErr_SetNone(PyExc_MemoryError);
-        return NULL;
+        return NULL; /* Memory allocation error */
     }
 
     for (i = 0; i < *numOfVectors; ++i) {
@@ -138,13 +139,13 @@ double **initVectorsArray(const int *numOfVectors, const int *dimension, PyObjec
         vector = PyList_GetItem(pyVectorsList, i);
         if (!PyList_Check(vector)) {
             MyPy_TypeErr("List", vector);
-            return NULL;
+            return NULL; /* Type error - not a python List */
         }
         for (j = 0; j < *dimension; ++j) {
             comp = PyList_GetItem(vector, j);
             vectorsArray[i][j] = PyFloat_AsDouble(comp);
             if (PyErr_Occurred())
-                return NULL;
+                return NULL; /* Cast error to double */
         }
     }
     return vectorsArray;
@@ -247,13 +248,13 @@ PyObject *buildPyListCentroids(Cluster *clustersArray, const int *k, const int *
                 Py_DecRef(listOfCentrals);
                 Py_DecRef(central);
                 Py_DecRef(comp);
-                return NULL; /* Appending error */
+                return NULL; /* Set error */
             }
         }
         if (PyList_SetItem(listOfCentrals, i, central)) {
             Py_DecRef(listOfCentrals);
             Py_DecRef(central);
-            return NULL; /* Appending error */
+            return NULL; /* Set error */
         }
     }
     return listOfCentrals;

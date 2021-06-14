@@ -26,7 +26,7 @@ def main():
     print(*[int(df_of_vectors['id'][i]) for i in list_random_init_centrals_indexes], sep=COMMA)
     list_of_vectors = np_of_vectors.tolist()
     final_centroids_list = mykmeanssp.fit(k, max_iter, dimensions, number_of_vectors,
-                                          list_random_init_centrals_indexes, list_of_vectors)
+                                          list_random_init_centrals_indexes, list_of_vectors)  # C api module
     print_centrals(final_centroids_list)
 
 
@@ -61,7 +61,7 @@ def build_vectors_dataframe():
         pd_2.rename(columns={list(pd_2)[0]: 'id'}, inplace=True)
         df = pd.merge(pd_1, pd_2, how='inner', on='id')  # merging using inner with id
         df.sort_values('id', inplace=True)
-        df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)  # reindex after sort
         return df
     except FileNotFoundError as err:
         print(f"{err.strerror}: {err.filename}")
