@@ -14,14 +14,16 @@ COMMA = ','
 # Using fit function from the module we build in C
 def main():
     k, max_iter = validate_and_assign_input_user()
-    np_of_vectors = build_vectors_numpy()
+    df_of_vectors = build_vectors_dataframe()
+    np_of_vectors = df_of_vectors.iloc[:, 1:].to_numpy()  # Only vectors without indexes
     number_of_vectors, dimensions = np_of_vectors.shape
     if k >= number_of_vectors:
-        print(f"K must be smaller than the number of vectors: K = {k}, number of vectors = {number_of_vectors}")
+        print(f"K must be smaller than the number of vectors (N): K = {k}, number of vectors = {number_of_vectors}")
         exit()  # End program k >= n
 
     list_random_init_centrals_indexes = choose_random_centrals(np_of_vectors, k, number_of_vectors)
-    print(*list_random_init_centrals_indexes, sep=COMMA)
+    #  Print indexes according to the vector's key read from the files ('id' in df)
+    print(*[int(df_of_vectors['id'][i]) for i in list_random_init_centrals_indexes], sep=COMMA)
     list_of_vectors = np_of_vectors.tolist()
     final_centroids_list = mykmeanssp.fit(k, max_iter, dimensions, number_of_vectors,
                                           list_random_init_centrals_indexes, list_of_vectors)
@@ -50,7 +52,7 @@ def validate_and_assign_input_user():
 
 #  Validates file arguments and assigns them, combines both files in to one panda with inner join
 #  Returns a panda that is holding the combined files data
-def build_vectors_numpy():
+def build_vectors_dataframe():
     add_argv_index = 1 if len(sys.argv) > MIN_ARGUMENTS + 1 else 0
     try:
         pd_1 = pd.read_csv(sys.argv[FIRST_FILE_INDEX_IN_ARGV + add_argv_index], header=None)
@@ -59,7 +61,8 @@ def build_vectors_numpy():
         pd_2.rename(columns={list(pd_2)[0]: 'id'}, inplace=True)
         df = pd.merge(pd_1, pd_2, how='inner', on='id')  # merging using inner with id
         df.sort_values('id', inplace=True)
-        return df.iloc[:, 1:].to_numpy()
+        df.reset_index(drop=True, inplace=True)
+        return df
     except FileNotFoundError as err:
         print(f"{err.strerror}: {err.filename}")
         exit(err.errno)
