@@ -150,7 +150,7 @@ int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const i
             if (PyErr_Occurred()) {
                 free(*vectorsArrayPtr);
                 free(matrix);
-                vectorsArrayPtr = NULL;
+                *vectorsArrayPtr = NULL;
                 return 1; /* Cast error to double */
             }
         }
