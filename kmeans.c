@@ -12,8 +12,8 @@ typedef struct {
     int counter; /* Number of vectors (datapoints) in cluster */
 } Cluster;
 
-double **initVectorsArray(const int *numOfVectors, const int *dimension, PyObject *pyVectorsList); /* Insert vectors into an array */
-Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes); /* Initialize empty clusters array */
+int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList); /* Insert vectors into an array */
+int initClusters(Cluster **clustersArrayPtr, double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes); /* Initialize empty clusters array */
 double vectorsNorm(const double *vec1, const double *vec2, const int *dimension); /* Calculate the norm between 2 vectors */
 int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *dimension); /* Return the vector's closest cluster (in terms of norm) */
 void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors, const int *dimension); /* For any vector assign to his closest cluster */
@@ -22,28 +22,23 @@ void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int 
 PyObject *buildPyListCentroids(Cluster *clustersArray, const int *k, const int *dimension); /* Print clusters' final centroids */
 void freeMemoryVectorsClusters(double **vectorsArray, Cluster *clustersArray, const int *k, int *firstCentralIndexes); /* Free the allocated memory */
 
-static PyObject* fit(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int* firstCentralIndexes) {
+static PyObject* fit(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int* firstCentralIndexes, Cluster **clustersArrayPtr) {
     int i, changes;
-    Cluster *clustersArray;
-    PyObject *listOfCentrals;
 
     /* Initialize clusters arrays */
-    clustersArray = initClusters(vectorsArray, &k, &dimension, firstCentralIndexes);
-    if (clustersArray == NULL)
+    if (initClusters(clustersArrayPtr, vectorsArray, &k, &dimension, firstCentralIndexes)) /* 0 (false) on success, true on malloc fail */
         return PyErr_NoMemory();
 
     for (i = 0; i < maxIter; ++i) {
-        initCurrCentroidAndCounter(clustersArray, &k, &dimension); /* Update curr centroid to prev centroid and reset the counter */
-        assignVectorsToClusters(vectorsArray, clustersArray, &k, &numOfVectors, &dimension);
-        changes = recalcCentroids(clustersArray, &k, &dimension); /* Calculate new centroids */
+        initCurrCentroidAndCounter(*clustersArrayPtr, &k, &dimension); /* Update curr centroid to prev centroid and reset the counter */
+        assignVectorsToClusters(vectorsArray, *clustersArrayPtr, &k, &numOfVectors, &dimension);
+        changes = recalcCentroids(*clustersArrayPtr, &k, &dimension); /* Calculate new centroids */
         if (changes == 0) { /* Centroids stay unchanged in the current iteration */
             break;
         }
     }
 
-    listOfCentrals = buildPyListCentroids(clustersArray, &k, &dimension);
-    freeMemoryVectorsClusters(vectorsArray, clustersArray, &k, firstCentralIndexes); /* Free memory */
-    return listOfCentrals;
+    return buildPyListCentroids(*clustersArrayPtr, &k, &dimension);
 }
 
 /*
@@ -54,9 +49,10 @@ static PyObject* fit(int k, int maxIter, int dimension, int numOfVectors, double
  */
 static PyObject* fit_connect(PyObject *self, PyObject *args) {
     Py_ssize_t i;
-    PyObject *pyCentralsList, *pyVectorsList;
+    PyObject *pyCentralsList, *pyVectorsList, *resault = NULL;
     int k, maxIter, dimension, numOfVectors, *firstCentralIndexes;
-    double **vectorsArray;
+    double **vectorsArray = NULL; /* Default value - not allocated */
+    Cluster *clustersArray = NULL; /* Default value - not allocated */
 
     if (!PyArg_ParseTuple(args, "iiiiOO", &k, &maxIter, &dimension, &numOfVectors, &pyCentralsList, &pyVectorsList))
         return NULL; /* Type error - not in correct format */
@@ -70,22 +66,24 @@ static PyObject* fit_connect(PyObject *self, PyObject *args) {
         return NULL; /* Type error - not a python List */
     }
 
-    Py_IncRef(pyCentralsList);
-    Py_IncRef(pyVectorsList);
     firstCentralIndexes = (int *) malloc(k * sizeof(int));
-    if (firstCentralIndexes == NULL)
-        return PyErr_NoMemory(); /* Memory allocation error */
+    if (firstCentralIndexes == NULL) {
+        resault = PyErr_NoMemory(); /* Memory allocation error */
+        goto end;
+    }
     for (i = 0; i < k; i++) {
         firstCentralIndexes[i] = (int)PyLong_AsLong(PyList_GetItem(pyCentralsList, i));
-        if (PyErr_Occurred())
-            return NULL; /* Casting error to int */
+        if (PyErr_Occurred()) {
+            goto end; /* Casting error to int */
+        }
     }
-    vectorsArray = initVectorsArray(&numOfVectors, &dimension, pyVectorsList);
-    Py_DecRef(pyCentralsList);
-    Py_DecRef(pyVectorsList);
-    if (vectorsArray == NULL)
-        return NULL;
-    return fit(k, maxIter, dimension, numOfVectors, vectorsArray, firstCentralIndexes);
+    if (initVectorsArray(&vectorsArray, &numOfVectors, &dimension, pyVectorsList)) /* return 0 (false) on success, true on error */
+        goto end; /* On any error from initVectorsArray() */
+    resault = fit(k, maxIter, dimension, numOfVectors, vectorsArray, firstCentralIndexes, &clustersArray);
+
+    end:
+    freeMemoryVectorsClusters(vectorsArray, clustersArray, &k, firstCentralIndexes); /* Free memory */
+    return resault;
 }
 
 /*
@@ -122,55 +120,67 @@ PyInit_mykmeanssp(void)
     return PyModule_Create(&moduledef);
 }
 
-double **initVectorsArray(const int *numOfVectors, const int *dimension, PyObject *pyVectorsList) {
+int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList) {
     Py_ssize_t i, j;
-    double *matrix, **vectorsArray;
+    double *matrix;
     PyObject *vector, *comp;
-    /* Allocate memory for vectorsArray */
+    /* Allocate memory for vectorsArrayPtr */
     matrix = (double *) malloc((*numOfVectors) * ((*dimension) + 1) * sizeof(double));
-    vectorsArray = malloc((*numOfVectors) * sizeof(double *));
-    if (matrix == NULL || vectorsArray == NULL){
+    *vectorsArrayPtr = malloc((*numOfVectors) * sizeof(double *));
+    if (matrix == NULL || (*vectorsArrayPtr) == NULL){
+        if (matrix != NULL)
+            free(matrix); /* Free matrix if exist */
         PyErr_SetNone(PyExc_MemoryError);
-        return NULL; /* Memory allocation error */
+        return 1; /* Memory allocation error */
     }
 
     for (i = 0; i < *numOfVectors; ++i) {
-        vectorsArray[i] = matrix + i * ((*dimension) + 1); /* Set VectorsArray to point to 2nd dimension array */
+        (*vectorsArrayPtr)[i] = matrix + i * ((*dimension) + 1); /* Set VectorsArray to point to 2nd dimension array */
         vector = PyList_GetItem(pyVectorsList, i);
         if (!PyList_Check(vector)) {
             MyPy_TypeErr("List", vector);
-            return NULL; /* Type error - not a python List */
+            free(*vectorsArrayPtr);
+            free(matrix);
+            *vectorsArrayPtr = NULL;
+            return 1; /* Type error - not a python List */
         }
         for (j = 0; j < *dimension; ++j) {
             comp = PyList_GetItem(vector, j);
-            vectorsArray[i][j] = PyFloat_AsDouble(comp);
-            if (PyErr_Occurred())
-                return NULL; /* Cast error to double */
-        }
-    }
-    return vectorsArray;
-}
-
-Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes) {
-    int i, j;
-    Cluster *clustersArray;
-    /* Allocate memory for clustersArray */
-    clustersArray = (Cluster *) malloc((*k) * sizeof(Cluster));
-    if (clustersArray != NULL) {
-        for (i = 0; i < *k; ++i) {
-            clustersArray[i].prevCentroid = (double *) malloc((*dimension) * sizeof(double));
-            clustersArray[i].currCentroid = (double *) malloc((*dimension) * sizeof(double));
-            if (clustersArray[i].prevCentroid == NULL || clustersArray[i].currCentroid == NULL)
-                return NULL;
-            clustersArray[i].counter = 0;
-
-            /* Assign the initial k vectors to their corresponding clusters according to the ones calculated in python */
-            for (j = 0; j < *dimension; ++j) {
-                clustersArray[i].currCentroid[j] = vectorsArray[firstCentralIndexes[i]][j];
+            (*vectorsArrayPtr)[i][j] = PyFloat_AsDouble(comp);
+            if (PyErr_Occurred()) {
+                free(*vectorsArrayPtr);
+                free(matrix);
+                vectorsArrayPtr = NULL;
+                return 1; /* Cast error to double */
             }
         }
     }
-    return clustersArray;
+    return 0; /* Success */
+}
+
+int initClusters(Cluster **clustersArrayPtr, double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes) {
+    int i, j, mallocFails = 0;
+    /* Allocate memory for clustersArrayPtr */
+    *clustersArrayPtr = (Cluster *) malloc((*k) * sizeof(Cluster));
+    if ((*clustersArrayPtr) != NULL) {
+        for (i = 0; i < *k; ++i) {
+            (*clustersArrayPtr)[i].counter = 0;
+            (*clustersArrayPtr)[i].prevCentroid = (double *) malloc((*dimension) * sizeof(double));
+            (*clustersArrayPtr)[i].currCentroid = (double *) malloc((*dimension) * sizeof(double));
+            if ((*clustersArrayPtr)[i].prevCentroid == NULL || (*clustersArrayPtr)[i].currCentroid == NULL) {
+                mallocFails++;
+                continue;
+            }
+
+            /* Assign the initial k vectors to their corresponding clusters according to the ones calculated in python */
+            for (j = 0; j < *dimension && mallocFails == 0; ++j) {
+                (*clustersArrayPtr)[i].currCentroid[j] = vectorsArray[firstCentralIndexes[i]][j];
+            }
+        }
+    } else {
+        mallocFails++;
+    }
+    return mallocFails; /* 0 on success, greater than 0 on fail */
 }
 
 double vectorsNorm(const double *vec1, const double *vec2, const int *dimension) {
@@ -240,21 +250,27 @@ PyObject *buildPyListCentroids(Cluster *clustersArray, const int *k, const int *
     Py_ssize_t i, j;
     PyObject *listOfCentrals, *central, *comp;
     listOfCentrals = PyList_New(*k);
-    for (i = 0; i < *k; ++i) {
-        central = PyList_New(*dimension);
-        for (j = 0; j < *dimension; ++j) {
-            comp = PyFloat_FromDouble(clustersArray[i].currCentroid[j]);
-            if (PyList_SetItem(central, j, comp)){
+    if (listOfCentrals != NULL) { /* If NULL alloc fail */
+        for (i = 0; i < *k; ++i) {
+            central = PyList_New(*dimension);
+            if (central == NULL) {
+                Py_DecRef(listOfCentrals);
+                return NULL; /* If NULL alloc fail */
+            }
+            for (j = 0; j < *dimension; ++j) {
+                comp = PyFloat_FromDouble(clustersArray[i].currCentroid[j]);
+                if (comp == NULL || PyList_SetItem(central, j, comp)) {
+                    Py_DecRef(listOfCentrals);
+                    Py_DecRef(central);
+                    Py_XDECREF(comp);
+                    return NULL; /* Set error */
+                }
+            }
+            if (PyList_SetItem(listOfCentrals, i, central)) {
                 Py_DecRef(listOfCentrals);
                 Py_DecRef(central);
-                Py_DecRef(comp);
                 return NULL; /* Set error */
             }
-        }
-        if (PyList_SetItem(listOfCentrals, i, central)) {
-            Py_DecRef(listOfCentrals);
-            Py_DecRef(central);
-            return NULL; /* Set error */
         }
     }
     return listOfCentrals;
@@ -263,14 +279,17 @@ PyObject *buildPyListCentroids(Cluster *clustersArray, const int *k, const int *
 void freeMemoryVectorsClusters(double **vectorsArray, Cluster *clustersArray, const int *k, int *firstCentralIndexes) {
     int i;
     /* Free clusters */
-    for (i = 0; i < *k; ++i) {
-        free(clustersArray[i].currCentroid);
-        free(clustersArray[i].prevCentroid);
+    if (clustersArray != NULL) {
+        for (i = 0; i < *k; ++i) {
+            free(clustersArray[i].currCentroid);
+            free(clustersArray[i].prevCentroid);
+        }
     }
     free(clustersArray);
     free(firstCentralIndexes);
 
     /* Free vectors */
-    free(*vectorsArray);
+    if (vectorsArray != NULL)
+        free(*vectorsArray);
     free(vectorsArray);
 }
