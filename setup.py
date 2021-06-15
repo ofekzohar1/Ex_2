@@ -7,5 +7,3 @@ setup(
     description='connecting kmeans++ algorithm from C to python program',
     ext_modules=[Extension('mykmeanssp', ['kmeans.c'])]
 )
-
-
