@@ -9,6 +9,7 @@ FIG_FILE_PIC = "elbow.png"  # File saved name
 
 
 # Using KMeans++ algorithm with random state 0 is needed on the data from iris
+# Inspired by predictivehacks.com
 # Using save_plot function
 def main():
     ds_iris = datasets.load_iris()
